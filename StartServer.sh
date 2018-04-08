@@ -1,2 +1,2 @@
-chmod -R 777 ChatSvr
+chmod +x ChatSvr
 nohup ./ChatSvr >> ChatSvr.log 2>&1 &

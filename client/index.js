@@ -1,5 +1,6 @@
 var socket = null;
 var bconnected = false
+var timerHeartBeat = null;
 
 $(function() {
     $("#localid").val(getLocalID())
@@ -99,8 +100,17 @@ function listen() {
             };
             msg = JSON.stringify(msg);
             socket.send(msg);
-            
             setState(true);
+            
+            timerHeartBeat = window.setInterval(function(){
+                var msg = {
+                    "msgType" : "HEARTBEAT",
+                    "msgRemote" : "10000",
+                    "msgBody" : ""
+                };
+                msg = JSON.stringify(msg);
+                socket.send(msg);
+            },30000);
         };
 
         socket.onmessage = function(evt) {
@@ -112,7 +122,7 @@ function listen() {
                     } else if (data.msgBody == "RECONNECT") {
                         $("#content").append("<kbd>" + getTime() + " 不允许重复登录！</kbd></br>");
                     }
-                } else if (data.msgType == "HEARBEAT") {
+                } else if (data.msgType == "HEARTBEAT") {
                     $("#content").append("<kbd>" + getTime() + " 服务器心跳包！</kbd></br>");
                 }
             } else {
@@ -127,6 +137,10 @@ function listen() {
                 scroll2End();
             }
             setState(false)
+            if (timerHeartBeat){
+                window.clearInterval(timerHeartBeat)
+                timerHeartBeat = null
+            }
         }
 
         socket.onerror = function(evt) {
@@ -138,6 +152,10 @@ function listen() {
                 scroll2End();
             }
             setState(false);
+            if (timerHeartBeat){
+                window.clearInterval(timerHeartBeat)
+                timerHeartBeat = null
+            }
         }
     } else {
         setState(false);
