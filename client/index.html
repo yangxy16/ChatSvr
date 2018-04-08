@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+
+        <title>WebSocket调试程序</title>
+        <link rel="stylesheet" href="https://cdn.bootcss.com/bootstrap/3.3.5/css/bootstrap.min.css">
+    </head>
+
+    <body>
+
+        <div class="container" style="padding-top:20px;">
+            <div class="panel panel-primary" style="height:120px;" id="contentbody">
+                <div class="panel panel-primary" style="width:100%; height:100%; overflow-y: scroll; float:left;" id="contentScroll">
+                    <div class="panel-body" id="content"></div>
+                </div>
+            </div>
+            <div>
+                <label>服务器地址：</label><input type="text" class="form-control" placeholder="请输入服务器地址" aria-describedby="sizing-addon1" id="serverip" value="127.0.0.1:8000">
+                <label>本机聊天ID：</label><input type="text" class="form-control" placeholder="请输入本机ID" aria-describedby="sizing-addon1" id="localid" value="">
+                <label>对方聊天ID：</label><input type="text" class="form-control" placeholder="请输入对方ID" aria-describedby="sizing-addon1" id="remoteid" value=""><br/>
+
+                <button type="button" class="btn btn-lg btn-success btn-block" onclick="listen()" id="listenBtn">连接服务器</button>
+                <button type="button" class="btn btn-lg btn-success btn-block" onclick="stop()" id="stopBtn">断开连接</button>
+                
+                <hr/>
+                <label>聊天信息：</label><input type="text" class="form-control" placeholder="请输入聊天消息" aria-describedby="sizing-addon1" id="msg"><br/>
+            </div>
+            <button type="button" class="btn btn-lg btn-success btn-block" onclick="sendmsg()" id="sendBtn">发送消息</button>
+        </div>
+
+        <script type="text/javascript" src="https://cdn.bootcss.com/jquery/2.1.4/jquery.min.js"></script>
+        <script type="text/javascript" src="https://cdn.bootcss.com/bootstrap/4.0.0/js/bootstrap.min.js"></script>
+        <script type="text/javascript" src="core.js"></script>
+        <script type="text/javascript" src="index.js"></script>
+    </body>
+</html>
