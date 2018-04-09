@@ -58,13 +58,19 @@ function sendmsg() {
     var lid = $("#localid").val();
     var text = encodeScript($("#msg").val());
     
+    if (lid.length < 1) {
+        alert( "请输入对方聊天ID！！！" );
+        return;
+    }
+    
+    
     if (rid == lid) {
-        alert( "请不要给自己发消息！！！" )
+        alert( "请不要给自己发消息！！！" );
         return;
     }
     
     if (text.length < 1) {
-        alert( "请不要发送空消息！！！" )
+        alert( "请不要发送空消息！！！" );
         return;
     }
     
@@ -179,6 +185,7 @@ function listen() {
         }
     } else {
         setState(false);
+        alert("请正确输入服务器信息（例如：192.168.1.10:8000）和本机用户ID（例如：123456）");
     }
 }
 
