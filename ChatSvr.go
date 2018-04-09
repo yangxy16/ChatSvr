@@ -11,7 +11,9 @@ import (
 	"io"
 	"net"
 	"os"
+	"os/signal"
 	"runtime"
+	//"runtime/pprof"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -554,6 +556,10 @@ func main() {
 		clientMaxCount = MAXCONN
 	}
 
+	//fDump, _ := os.Create("ChatSvr.dump")
+	//pprof.StartCPUProfile(fDump)
+	bRunning := true
+
 	svrSock, err := net.Listen("tcp", *ipaddr)
 	if err != nil {
 		addLog("地址被占用，服务无法启动")
@@ -561,6 +567,17 @@ func main() {
 	}
 	defer func() {
 		svrSock.Close()
+		//pprof.StopCPUProfile()
+	}()
+
+	stop_chan := make(chan os.Signal)
+	signal.Notify(stop_chan, os.Interrupt)
+
+	go func() {
+		<-stop_chan
+		svrSock.Close()
+		addLog("服务退出成功")
+		bRunning = false
 	}()
 
 	addLog("服务启动成功")
@@ -569,7 +586,11 @@ func main() {
 	for {
 		conn, err := svrSock.Accept()
 		if err != nil {
-			continue
+			if bRunning {
+				continue
+			} else {
+				break
+			}
 		}
 		clientJoinChannel <- conn
 	}
