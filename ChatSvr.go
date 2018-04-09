@@ -90,6 +90,11 @@ var clientOfflineMsgChannel chan msgOffline //客户端离线消息写入列表
 var clientMaxCount int64                    //客户端最大连接数量
 var clientCurrentCount int64                //当前客户端连接数量
 
+func addLog(msg ...interface{}) {
+	fmt.Print(time.Now().Format("2006-01-02 15:04:05 "))
+	fmt.Println(msg...)
+}
+
 /*客户端握手协程*/
 func (this *tcpClient) handShake() {
 	bHttpHeader := make([]byte, 1024)
@@ -517,8 +522,8 @@ func clientOfflineMsgHandler(msgChan chan msgOffline) {
 
 func clientCountBroadCast() {
 	for {
-		fmt.Println("当前客户端数量：", clientCurrentCount)
 		time.Sleep(TIMEBRAODCAST * time.Second)
+		addLog("当前客户端数量：", clientCurrentCount)
 	}
 }
 
@@ -548,14 +553,14 @@ func main() {
 
 	svrSock, err := net.Listen("tcp", *ipaddr)
 	if err != nil {
-		fmt.Println("地址被占用，服务无法启动")
+		addLog("地址被占用，服务无法启动")
 		return
 	}
 	defer func() {
 		svrSock.Close()
 	}()
 
-	fmt.Println("服务已启动...", *ipaddr)
+	addLog("服务启动成功")
 	go clientCountBroadCast()
 
 	for {

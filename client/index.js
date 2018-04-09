@@ -18,10 +18,10 @@ function scroll2End() {
 
 function getLocalID() {
     
-    var chars = ['0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z','a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z'];
+    var chars = ['0','1','2','3','4','5','6','7','8','9'];
     var res = "";
-    for(var i = 0; i < 8; i++) {
-        var id = Math.ceil(Math.random()*61);
+    for(var i = 0; i < 5; i++) {
+        var id = Math.ceil(Math.random()*9);
         res += chars[id];
     }
     return res;
@@ -72,6 +72,24 @@ function sendmsg() {
     $("#content").append("<kbd>" + getTime() + " 发送消息[" + text + "]到用户[" + rid + "]</kbd></br>");
     scroll2End();
     $("#msg").val("");
+    heartbeat();
+}
+
+function heartbeat() {
+    if (timerHeartBeat != null) {
+        window.clearInterval(timerHeartBeat)
+        timerHeartBeat = null
+    }
+    timerHeartBeat = window.setInterval(function(){
+        var msg = {
+            "msgType" : "HEARTBEAT",
+            "msgRemote" : "10000",
+            "msgBody" : ""
+        };
+        msg = JSON.stringify(msg);
+        socket.send(msg);
+        $("#content").append("<kbd>" + getTime() + " 向服务器发送心跳包！</kbd></br>");
+    },30000);
 }
 
 function listen() {
@@ -101,16 +119,8 @@ function listen() {
             msg = JSON.stringify(msg);
             socket.send(msg);
             setState(true);
+            heartbeat();
             
-            timerHeartBeat = window.setInterval(function(){
-                var msg = {
-                    "msgType" : "HEARTBEAT",
-                    "msgRemote" : "10000",
-                    "msgBody" : ""
-                };
-                msg = JSON.stringify(msg);
-                socket.send(msg);
-            },30000);
         };
 
         socket.onmessage = function(evt) {
@@ -123,7 +133,7 @@ function listen() {
                         $("#content").append("<kbd>" + getTime() + " 不允许重复登录！</kbd></br>");
                     }
                 } else if (data.msgType == "HEARTBEAT") {
-                    $("#content").append("<kbd>" + getTime() + " 服务器心跳包！</kbd></br>");
+                    $("#content").append("<kbd>" + getTime() + " 接收到服务器心跳包！</kbd></br>");
                 }
             } else {
                 if (data.msgType == "TRANS2USER") {
