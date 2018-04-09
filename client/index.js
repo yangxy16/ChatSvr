@@ -55,7 +55,13 @@ function setState(bConnect) {
 function sendmsg() {
 
     var rid = $("#remoteid").val();
+    var lid = $("#localid").val();
     var text = encodeScript($("#msg").val());
+    
+    if (rid == lid) {
+        alert( "请不要给自己发消息！！！" )
+        return;
+    }
     
     if (text.length < 1) {
         alert( "请不要发送空消息！！！" )
@@ -180,6 +186,13 @@ function stop() {
     if ( bconnected && socket != null ) {
         socket.close();
     }
+}
+
+function encodeScript(data) {
+    if(null == data || "" == data) {
+        return "";
+    }
+    return data.replace("<", "&lt;").replace(">", "&gt;");
 }
 
 document.onkeydown = function(event){

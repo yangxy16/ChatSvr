@@ -342,6 +342,9 @@ func (this *tcpClient) readMsg(opcode uint8, buf []byte) (ret bool) {
 				}
 			}
 		} else {
+			if msgJson.MsgRemote == this.userFlag {
+				return true
+			}
 			if msgJson.MsgType == MESSAGE_TRANS2USER && len(msgJson.MsgRemote) > 0 {
 				msgSend := msgData{MESSAGE_TRANS2USER, this.userFlag, msgJson.MsgBody}
 				msgSendBuf, _ := json.Marshal(msgSend)
@@ -494,7 +497,7 @@ func clientConnHandler(joinChan chan net.Conn) {
 		if clientCurrentCount < clientMaxCount {
 			atomic.AddInt64(&clientCurrentCount, 1)
 			c := &tcpClient{userFlag: "", userConn: conn, handShaked: false, sendMsgChan: make(chan msgBuf, 32)}
-			conn.SetReadDeadline(time.Now().Add(2 * time.Minute))
+			conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 			go c.handShake()
 		} else {
 			conn.Close()
