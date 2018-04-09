@@ -126,7 +126,11 @@ function listen() {
                     $("#content").append("<kbd>" + getTime() + " 服务器心跳包！</kbd></br>");
                 }
             } else {
-                $("#content").append("<kbd>" + getTime() + " 接收到来自[" + data.msgRemote + "]的消息[" + data.msgBody + "]</kbd></br>");
+                if (data.msgType == "TRANS2USER") {
+                    $("#content").append("<kbd>" + getTime() + " 接收到来自[" + data.msgRemote + "]的消息[" + data.msgBody + "]</kbd></br>");
+                } else if (data.msgType == "REMOTEOFFLINE") {
+                    $("#content").append("<kbd>" + getTime() + " [" + data.msgRemote + "]当前不在线</kbd></br>");
+                }
             }
             scroll2End();
         };

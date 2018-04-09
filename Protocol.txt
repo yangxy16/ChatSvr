@@ -19,6 +19,9 @@ User========{"msgType":"TRANS2USER", "msgRemote":"10002", "msgBody":"123"}
 S -> C2
 User========{"msgType":"TRANS2USER", "msgRemote":"10001", "msgBody":"321"}
 参数说明：msgRemote为C1的ID（识别码），msgBody为要C1发过来的消息
+
+如果C1给C2发消息时C2不在线则 S -> C1
+User========{"msgType":"REMOTEOFFLINE", "msgRemote":"10001", "msgBody":""}
 /***************************************************************************************************/
 
 

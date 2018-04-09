@@ -70,15 +70,18 @@ type msgOffline struct {
 }
 
 const (
-	MESSAGE_ADMIN      = "10000"
-	MESSAGE_LOGIN      = "LOGIN"
-	MESSAGE_TRANS2USER = "TRANS2USER"
-	MESSAGE_LOGIN_OK   = "OK"
-	MESSAGE_LOGIN_FAIL = "RECONNECT"
-	MESSAGE_HEART_BEAT = "HEARTBEAT"
+	MESSAGE_ADMIN          = "10000"
+	MESSAGE_LOGIN          = "LOGIN"
+	MESSAGE_TRANS2USER     = "TRANS2USER"
+	MESSAGE_LOGIN_OK       = "OK"
+	MESSAGE_LOGIN_FAIL     = "RECONNECT"
+	MESSAGE_HEART_BEAT     = "HEARTBEAT"
+	MESSAGE_REMOTE_OFFLINE = "REMOTEOFFLINE"
 )
 
 const OFFLINEFILEPATH = "./OfflineMessage/"
+const TIMEBRAODCAST = 120
+const MAXCONN = 20000
 
 var clientJoinChannel chan net.Conn         //等待建立链接的通道
 var clientIDList map[string]*tcpClient      //客户端列表
@@ -343,6 +346,9 @@ func (this *tcpClient) readMsg(opcode uint8, buf []byte) (ret bool) {
 					dstUser.sendTextMsg(msgSendBuf)
 				} else {
 					addOfflineMsg(msgJson.MsgRemote, msgSendBuf)
+					msgSend := msgData{MESSAGE_REMOTE_OFFLINE, msgJson.MsgRemote, ""}
+					msgSendBuf, _ := json.Marshal(msgSend)
+					this.sendTextMsg(msgSendBuf)
 				}
 				clientListLock.Unlock()
 				msgSendBuf = nil
@@ -512,7 +518,7 @@ func clientOfflineMsgHandler(msgChan chan msgOffline) {
 func clientCountBroadCast() {
 	for {
 		fmt.Println("当前客户端数量：", clientCurrentCount)
-		time.Sleep(15 * time.Second)
+		time.Sleep(TIMEBRAODCAST * time.Second)
 	}
 }
 
@@ -523,7 +529,7 @@ func main() {
 	}
 
 	ipaddr := flag.String("ipaddr", "0.0.0.0:8000", "tcp service listen address")
-	maxconn := flag.Uint64("maxconn", 2000, "tcp service max client count")
+	maxconn := flag.Uint64("maxconn", MAXCONN, "tcp service max client count")
 
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
@@ -536,8 +542,8 @@ func main() {
 	flag.Parse()
 
 	clientMaxCount = int64(*maxconn)
-	if clientMaxCount <= 0 || clientMaxCount >= 2000 {
-		clientMaxCount = 2000
+	if clientMaxCount <= 0 || clientMaxCount >= MAXCONN {
+		clientMaxCount = MAXCONN
 	}
 
 	svrSock, err := net.Listen("tcp", *ipaddr)
