@@ -6,18 +6,19 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
 	"net"
 	"os"
 	"os/signal"
 	"runtime"
-	//"runtime/pprof"
+	"runtime/pprof"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/c4pt0r/ini"
 )
 
 type msgBuf struct {
@@ -76,7 +77,7 @@ const (
 	MESSAGE_LOGIN          = "LOGIN"
 	MESSAGE_TRANS2USER     = "TRANS2USER"
 	MESSAGE_LOGIN_OK       = "OK"
-	MESSAGE_LOGIN_FAIL     = "RECONNECT"
+	MESSAGE_LOGIN_RECONN   = "RECONNECT"
 	MESSAGE_HEART_BEAT     = "HEARTBEAT"
 	MESSAGE_REMOTE_OFFLINE = "REMOTEOFFLINE"
 )
@@ -91,6 +92,7 @@ var clientListLock sync.Mutex               //客户端列表读写锁
 var clientOfflineMsgChannel chan msgOffline //客户端离线消息写入列表
 var clientMaxCount int64                    //客户端最大连接数量
 var clientCurrentCount int64                //当前客户端连接数量
+var recordOfflineMsg bool                   //是否记录离线消息
 
 func addLog(msg ...interface{}) {
 	fmt.Print(time.Now().Format("2006-01-02 15:04:05 "))
@@ -274,9 +276,11 @@ func (this *tcpClient) writeLoop() {
 
 	for msg := range this.sendMsgChan {
 		if _, err := this.userConn.Write(msg.buf); err != nil {
-			_opcode := uint8(msg.buf[0]) & 0x0f
-			if _opcode == TextFrame { //只记录文本类型的消息
-				addOfflineMsg(this.userFlag, msg.buf)
+			if recordOfflineMsg {
+				_opcode := uint8(msg.buf[0]) & 0x0f
+				if _opcode == TextFrame { //只记录文本类型的消息
+					addOfflineMsg(this.userFlag, msg.buf)
+				}
 			}
 			msg.buf = nil
 			break
@@ -340,7 +344,7 @@ func (this *tcpClient) readMsg(opcode uint8, buf []byte) (ret bool) {
 			}
 			clientListLock.Unlock()
 			if ok {
-				msgSend := msgData{MESSAGE_LOGIN, MESSAGE_ADMIN, MESSAGE_LOGIN_FAIL}
+				msgSend := msgData{MESSAGE_LOGIN, MESSAGE_ADMIN, MESSAGE_LOGIN_RECONN}
 				msgSendBuf, _ := json.Marshal(msgSend)
 				this.sendTextMsg(msgSendBuf)
 				msgSendBuf = nil
@@ -368,7 +372,9 @@ func (this *tcpClient) readMsg(opcode uint8, buf []byte) (ret bool) {
 				if ok {
 					dstUser.sendTextMsg(msgSendBuf)
 				} else {
-					addOfflineMsg(msgJson.MsgRemote, msgSendBuf)
+					if recordOfflineMsg {
+						addOfflineMsg(msgJson.MsgRemote, msgSendBuf)
+					}
 					msgSendOffline := msgData{MESSAGE_REMOTE_OFFLINE, msgJson.MsgRemote, ""}
 					msgSendBufOffline, _ := json.Marshal(msgSendOffline)
 					this.sendTextMsg(msgSendBufOffline)
@@ -537,6 +543,7 @@ func clientOfflineMsgHandler(msgChan chan msgOffline) {
 			f.Write(buf.Bytes())
 			buf = nil
 		}
+		offlineMsg.buf = nil
 		f.Close()
 		runtime.Gosched()
 	}
@@ -544,19 +551,29 @@ func clientOfflineMsgHandler(msgChan chan msgOffline) {
 
 func clientCountBroadCast() {
 	for {
-		time.Sleep(TIMEBRAODCAST * time.Second)
 		addLog("当前客户端数量：", clientCurrentCount)
+		time.Sleep(TIMEBRAODCAST * time.Second)
 	}
 }
 
 func main() {
 
-	if exits, _ := PathExists(OFFLINEFILEPATH); exits != true {
-		os.MkdirAll(OFFLINEFILEPATH, os.ModePerm)
-	}
+	var conf = ini.NewConf("ChatSvr.ini")
+	ipaddr := conf.String("ServerConf", "ipaddr", "0.0.0.0:8000")
+	maxconn := conf.Int("ServerConf", "maxconn", MAXCONN)
+	offlinedir := conf.String("ServerConf", "offlinedir", OFFLINEFILEPATH)
+	dumpFlag := conf.Bool("ServerConf", "dump", false)
 
-	ipaddr := flag.String("ipaddr", "0.0.0.0:8000", "tcp service listen address")
-	maxconn := flag.Uint64("maxconn", MAXCONN, "tcp service max client count")
+	conf.Parse()
+
+	if len(*offlinedir) > 0 {
+		recordOfflineMsg = true
+		if exits, _ := PathExists(*offlinedir); exits != true {
+			os.MkdirAll(*offlinedir, os.ModePerm)
+		}
+	} else {
+		recordOfflineMsg = false
+	}
 
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
@@ -566,27 +583,31 @@ func main() {
 	go clientOfflineMsgHandler(clientOfflineMsgChannel)
 	clientIDList = make(map[string]*tcpClient)
 
-	flag.Parse()
-
 	clientMaxCount = int64(*maxconn)
 	if clientMaxCount <= 0 || clientMaxCount >= MAXCONN {
 		clientMaxCount = MAXCONN
 	}
 
-	//fDump, _ := os.Create("ChatSvr.dump")
+	var fDump *os.File = nil
+
+	if *dumpFlag {
+		fDump, _ = os.Create("ChatSvr.dump")
+	}
 	//pprof.StartCPUProfile(fDump)
 	bRunning := true
 
 	svrSock, err := net.Listen("tcp", *ipaddr)
 	if err != nil {
-		addLog("地址被占用，服务无法启动")
+		addLog("地址被占用，服务无法启动", *ipaddr)
 		return
 	}
 	defer func() {
 		svrSock.Close()
-		//pprof.StopCPUProfile()
-		//pprof.WriteHeapProfile(fDump)
-		//fDump.Close()
+		if fDump != nil {
+			//pprof.StopCPUProfile()
+			pprof.WriteHeapProfile(fDump)
+			fDump.Close()
+		}
 	}()
 
 	stop_chan := make(chan os.Signal)
@@ -599,7 +620,7 @@ func main() {
 		bRunning = false
 	}()
 
-	addLog("服务启动成功")
+	addLog("服务启动成功", *ipaddr)
 	go clientCountBroadCast()
 
 	for {
