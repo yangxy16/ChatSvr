@@ -160,10 +160,6 @@ func (this *tcpClient) readLoop() (err error) {
 		bTotalBuf := make([]byte, 0)
 		bMsgBuf := make([]byte, 1)
 
-		defer func() {
-			bTotalBuf = nil
-			bMsgBuf = nil
-		}()
 		for {
 			var frame wsFrame
 			if _, err := this.userConn.Read(bMsgBuf); err != nil {
@@ -176,13 +172,16 @@ func (this *tcpClient) readLoop() (err error) {
 
 			if frame._opcode == ConnectionClose {
 				this.sendCloseMsg()
+				bTotalBuf = nil
 				return nil
 			} else if frame._opcode == Ping {
 				this.sendPongMsg()
+				bTotalBuf = nil
 				break
 			}
 
 			if _, err := this.userConn.Read(bMsgBuf); err != nil {
+				bTotalBuf = nil
 				return err
 			}
 
@@ -195,23 +194,27 @@ func (this *tcpClient) readLoop() (err error) {
 			} else if frame._payloadlen == 126 {
 				bMsgBuf := make([]byte, 2)
 				if _, err := this.userConn.Read(bMsgBuf); err != nil {
+					bTotalBuf = nil
 					return err
 				}
 				frame._payloadlen = uint64(binary.BigEndian.Uint16(bMsgBuf))
 			} else if frame._payloadlen == 127 {
 				bMsgBuf := make([]byte, 8)
 				if _, err := this.userConn.Read(bMsgBuf); err != nil {
+					bTotalBuf = nil
 					return err
 				}
 				frame._payloadlen = binary.BigEndian.Uint64(bMsgBuf)
 			} else {
 				this.sendCloseMsg()
+				bTotalBuf = nil
 				return nil
 			}
 
 			if frame._mask == 1 {
 				frame._maskKey = make([]byte, 4)
 				if _, err := this.userConn.Read(frame._maskKey); err != nil {
+					bTotalBuf = nil
 					return err
 				}
 			}
@@ -221,6 +224,7 @@ func (this *tcpClient) readLoop() (err error) {
 				nRecvLen := 0
 				for {
 					if recvLen, err := this.userConn.Read(frame._msg[nRecvLen:]); err != nil {
+						bTotalBuf = nil
 						return err
 					} else {
 						nRecvLen += recvLen
@@ -248,10 +252,15 @@ func (this *tcpClient) readLoop() (err error) {
 					}
 					break
 				}
+			} else {
+				bTotalBuf = nil
 			}
 		}
 		this.userConn.SetReadDeadline(time.Now().Add(2 * time.Minute))
 		runtime.Gosched()
+
+		bTotalBuf = nil
+		bMsgBuf = nil
 	}
 	return nil
 }
@@ -269,8 +278,10 @@ func (this *tcpClient) writeLoop() {
 			if _opcode == TextFrame { //只记录文本类型的消息
 				addOfflineMsg(this.userFlag, msg.buf)
 			}
+			msg.buf = nil
 			break
 		}
+		msg.buf = nil
 		runtime.Gosched()
 	}
 }
@@ -307,13 +318,13 @@ func (this *tcpClient) sendBinaryMsg(msg []byte) {
 func (this *tcpClient) readMsg(opcode uint8, buf []byte) (ret bool) {
 	defer func() {
 		recover()
+		buf = nil
 	}()
 
 	switch opcode {
 	case TextFrame:
-		msg := string(buf)
 		var msgJson msgData
-		err := json.Unmarshal([]byte(msg), &msgJson)
+		err := json.Unmarshal(buf, &msgJson)
 		if err != nil {
 			return false
 		}
@@ -332,11 +343,13 @@ func (this *tcpClient) readMsg(opcode uint8, buf []byte) (ret bool) {
 				msgSend := msgData{MESSAGE_LOGIN, MESSAGE_ADMIN, MESSAGE_LOGIN_FAIL}
 				msgSendBuf, _ := json.Marshal(msgSend)
 				this.sendTextMsg(msgSendBuf)
+				msgSendBuf = nil
 				return false
 			}
 			msgSend := msgData{MESSAGE_LOGIN, MESSAGE_ADMIN, MESSAGE_LOGIN_OK}
 			msgSendBuf, _ := json.Marshal(msgSend)
 			this.sendTextMsg(msgSendBuf)
+			msgSendBuf = nil
 			msgOfflineData, ok := this.readOfflineMsg()
 			if ok {
 				for i := 0; i < len(msgOfflineData); i++ {
@@ -356,9 +369,10 @@ func (this *tcpClient) readMsg(opcode uint8, buf []byte) (ret bool) {
 					dstUser.sendTextMsg(msgSendBuf)
 				} else {
 					addOfflineMsg(msgJson.MsgRemote, msgSendBuf)
-					msgSend := msgData{MESSAGE_REMOTE_OFFLINE, msgJson.MsgRemote, ""}
-					msgSendBuf, _ := json.Marshal(msgSend)
-					this.sendTextMsg(msgSendBuf)
+					msgSendOffline := msgData{MESSAGE_REMOTE_OFFLINE, msgJson.MsgRemote, ""}
+					msgSendBufOffline, _ := json.Marshal(msgSendOffline)
+					this.sendTextMsg(msgSendBufOffline)
+					msgSendBufOffline = nil
 				}
 				clientListLock.Unlock()
 				msgSendBuf = nil
@@ -366,6 +380,7 @@ func (this *tcpClient) readMsg(opcode uint8, buf []byte) (ret bool) {
 				msgSend := msgData{MESSAGE_HEART_BEAT, MESSAGE_ADMIN, ""}
 				msgSendBuf, _ := json.Marshal(msgSend)
 				this.sendTextMsg(msgSendBuf)
+				msgSendBuf = nil
 			}
 		}
 		break
@@ -393,6 +408,7 @@ func (this *tcpClient) closeClient() {
 func (this *tcpClient) makeWsFrame(opcode uint8, lpBuffer []byte) (ret []byte) {
 	defer func() {
 		recover()
+		lpBuffer = nil
 	}()
 
 	var fin uint8 = 1
@@ -519,6 +535,7 @@ func clientOfflineMsgHandler(msgChan chan msgOffline) {
 			binary.Write(buf, binary.LittleEndian, uint32(len(offlineMsg.buf)))
 			binary.Write(buf, binary.LittleEndian, offlineMsg.buf)
 			f.Write(buf.Bytes())
+			buf = nil
 		}
 		f.Close()
 		runtime.Gosched()
@@ -568,6 +585,8 @@ func main() {
 	defer func() {
 		svrSock.Close()
 		//pprof.StopCPUProfile()
+		//pprof.WriteHeapProfile(fDump)
+		//fDump.Close()
 	}()
 
 	stop_chan := make(chan os.Signal)
