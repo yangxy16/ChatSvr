@@ -75,7 +75,7 @@ function sendmsg() {
     }
     
     var msg = {
-        "msgType" : "TRANS2USER",
+        "msgType" : "USERMSG",
         "msgRemote" : rid,
         "msgBody" : text
     };
@@ -142,13 +142,13 @@ function listen() {
                     if (data.msgBody == "OK") {
                         $("#content").append("<kbd>" + getTime() + " 登录成功！</kbd></br>");
                     } else if (data.msgBody == "RECONNECT") {
-                        $("#content").append("<kbd>" + getTime() + " 不允许重复登录！</kbd></br>");
+                        $("#content").append("<kbd>" + getTime() + " 你已经在其他地方登录了，不要重复登录！</kbd></br>");
                     }
                 } else if (data.msgType == "HEARTBEAT") {
                     $("#content").append("<kbd>" + getTime() + " 接收到服务器心跳包！</kbd></br>");
                 }
             } else {
-                if (data.msgType == "TRANS2USER") {
+                if (data.msgType == "USERMSG") {
                     $("#content").append("<kbd>" + getTime() + " 接收到来自[" + data.msgRemote + "]的消息[" + data.msgBody + "]</kbd></br>");
                 } else if (data.msgType == "REMOTEOFFLINE") {
                     $("#content").append("<kbd>" + getTime() + " [" + data.msgRemote + "]当前不在线</kbd></br>");

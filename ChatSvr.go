@@ -27,11 +27,12 @@ type msgBuf struct {
 
 /*tcp客户端结构体*/
 type tcpClient struct {
-	userFlag    string
-	userConn    net.Conn
-	handShaked  bool
-	sendMsgChan chan msgBuf
-	closeOnce   sync.Once
+	userFlag     string
+	chatroomFlag string
+	userConn     net.Conn
+	handShaked   bool
+	sendMsgChan  chan msgBuf
+	closeOnce    sync.Once
 }
 
 /*用户消息*/
@@ -72,31 +73,82 @@ type msgOffline struct {
 	buf []byte
 }
 
+type chatRoom struct {
+	id       string
+	userList map[string]*tcpClient
+}
+
 const (
 	MESSAGE_ADMIN          = "10000"
 	MESSAGE_LOGIN          = "LOGIN"
-	MESSAGE_TRANS2USER     = "TRANS2USER"
+	MESSAGE_USERMSG        = "USERMSG"
 	MESSAGE_LOGIN_OK       = "OK"
 	MESSAGE_LOGIN_RECONN   = "RECONNECT"
 	MESSAGE_HEART_BEAT     = "HEARTBEAT"
 	MESSAGE_REMOTE_OFFLINE = "REMOTEOFFLINE"
+	MESSAGE_JOIN_CHATROOM  = "JOINCHATROOM"
+	MESSAGE_EXIT_CHATROOM  = "EXITCHATROOM"
+	MESSAGE_CHATROOMMSG    = "CHATROOMMSG"
 )
 
-const OFFLINEFILEPATH = "./OfflineMessage/"
-const TIMEBRAODCAST = 120
-const MAXCONN = 20000
+const (
+	OFFLINEFILEPATH = "./OfflineMessage/" //离线消息存储路径
+	TIMEBRAODCAST   = 120                 //客户端数量广播间隔
+	MAXCONN         = 20000               //客户端最大连接数量
+	MAXCRPERSON     = 1000                //每个聊天室人数最大数量
+)
 
-var clientJoinChannel chan net.Conn         //等待建立链接的通道
-var clientIDList map[string]*tcpClient      //客户端列表
-var clientListLock sync.Mutex               //客户端列表读写锁
-var clientOfflineMsgChannel chan msgOffline //客户端离线消息写入列表
-var clientMaxCount int64                    //客户端最大连接数量
-var clientCurrentCount int64                //当前客户端连接数量
-var recordOfflineMsg bool                   //是否记录离线消息
+var (
+	clientJoinChannel       chan net.Conn         //等待建立链接的通道
+	clientIDList            map[string]*tcpClient //客户端列表
+	clientListLock          sync.Mutex            //客户端列表读写锁
+	clientOfflineMsgChannel chan msgOffline       //客户端离线消息写入列表
+	clientMaxCount          int64                 //客户端最大连接数量
+	clientCurrentCount      int64                 //当前客户端连接数量
+	recordOfflineMsg        bool                  //是否记录离线消息
+	chatRoomList            map[string]*chatRoom  //聊天室列表
+	chatRoomListLock        sync.Mutex            //聊天室读写锁
+)
 
 func addLog(msg ...interface{}) {
 	fmt.Print(time.Now().Format("2006-01-02 15:04:05 "))
 	fmt.Println(msg...)
+}
+
+func joinChatRoom(roomid string, userClient *tcpClient) bool {
+	chatRoomListLock.Lock()
+	defer chatRoomListLock.Unlock()
+	chatRoomObj, ok := chatRoomList[roomid]
+	if !ok {
+		chatRoomObj = chatRoom{id: roomid, userList: make(map[string]*tcpClient)}
+	}
+	if len(chatRoomObj.userList) < MAXCRPERSON {
+		chatRoomObj.userList[userClient.userFlag] = userClient
+		userClient.chatroomFlag = roomid
+		return true
+
+	}
+	return false
+}
+
+func exitChatRoom(userClient *tcpClient) bool {
+	chatRoomListLock.Lock()
+	defer chatRoomListLock.Unlock()
+	roomid := userClient.chatroomFlag
+	chatRoomObj, ok := chatRoomList[roomid]
+	if !ok {
+		return false
+	}
+	userClient.chatroomFlag = ""
+	delete(chatRoomObj.userList, userClient.userFlag)
+	if len(chatRoomObj.userList) < 1 {
+		delete(chatRoomList, roomid)
+	}
+	return true
+}
+
+func msgChatRoom(roomid string, msg []byte) {
+	return
 }
 
 /*客户端握手协程*/
@@ -364,8 +416,8 @@ func (this *tcpClient) readMsg(opcode uint8, buf []byte) (ret bool) {
 			if msgJson.MsgRemote == this.userFlag {
 				return true
 			}
-			if msgJson.MsgType == MESSAGE_TRANS2USER && len(msgJson.MsgRemote) > 0 {
-				msgSend := msgData{MESSAGE_TRANS2USER, this.userFlag, msgJson.MsgBody}
+			if msgJson.MsgType == MESSAGE_USERMSG && len(msgJson.MsgRemote) > 0 {
+				msgSend := msgData{MESSAGE_USERMSG, this.userFlag, msgJson.MsgBody}
 				msgSendBuf, _ := json.Marshal(msgSend)
 				clientListLock.Lock()
 				dstUser, ok := clientIDList[msgJson.MsgRemote]
@@ -520,7 +572,7 @@ func clientConnHandler(joinChan chan net.Conn) {
 	for conn := range joinChan {
 		if clientCurrentCount < clientMaxCount {
 			atomic.AddInt64(&clientCurrentCount, 1)
-			c := &tcpClient{userFlag: "", userConn: conn, handShaked: false, sendMsgChan: make(chan msgBuf, 32)}
+			c := &tcpClient{userFlag: "", chatroomFlag: "", userConn: conn, handShaked: false, sendMsgChan: make(chan msgBuf, 32)}
 			conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 			go c.handShake()
 		} else {
