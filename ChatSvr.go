@@ -68,14 +68,9 @@ type msgData struct {
 	MsgBody   string `json:"msgBody"`
 }
 
-type msgOffline struct {
+type msgChat struct {
 	id  string
 	buf []byte
-}
-
-type chatRoom struct {
-	id       string
-	userList map[string]*tcpClient
 }
 
 const (
@@ -86,69 +81,27 @@ const (
 	MESSAGE_LOGIN_RECONN   = "RECONNECT"
 	MESSAGE_HEART_BEAT     = "HEARTBEAT"
 	MESSAGE_REMOTE_OFFLINE = "REMOTEOFFLINE"
-	MESSAGE_JOIN_CHATROOM  = "JOINCHATROOM"
-	MESSAGE_EXIT_CHATROOM  = "EXITCHATROOM"
-	MESSAGE_CHATROOMMSG    = "CHATROOMMSG"
 )
 
 const (
 	OFFLINEFILEPATH = "./OfflineMessage/" //离线消息存储路径
 	TIMEBRAODCAST   = 120                 //客户端数量广播间隔
 	MAXCONN         = 20000               //客户端最大连接数量
-	MAXCRPERSON     = 1000                //每个聊天室人数最大数量
 )
 
 var (
 	clientJoinChannel       chan net.Conn         //等待建立链接的通道
 	clientIDList            map[string]*tcpClient //客户端列表
 	clientListLock          sync.Mutex            //客户端列表读写锁
-	clientOfflineMsgChannel chan msgOffline       //客户端离线消息写入列表
+	clientOfflineMsgChannel chan msgChat          //客户端离线消息写入列表
 	clientMaxCount          int64                 //客户端最大连接数量
 	clientCurrentCount      int64                 //当前客户端连接数量
 	recordOfflineMsg        bool                  //是否记录离线消息
-	chatRoomList            map[string]*chatRoom  //聊天室列表
-	chatRoomListLock        sync.Mutex            //聊天室读写锁
 )
 
 func addLog(msg ...interface{}) {
 	fmt.Print(time.Now().Format("2006-01-02 15:04:05 "))
 	fmt.Println(msg...)
-}
-
-func joinChatRoom(roomid string, userClient *tcpClient) bool {
-	chatRoomListLock.Lock()
-	defer chatRoomListLock.Unlock()
-	chatRoomObj, ok := chatRoomList[roomid]
-	if !ok {
-		chatRoomObj = chatRoom{id: roomid, userList: make(map[string]*tcpClient)}
-	}
-	if len(chatRoomObj.userList) < MAXCRPERSON {
-		chatRoomObj.userList[userClient.userFlag] = userClient
-		userClient.chatroomFlag = roomid
-		return true
-
-	}
-	return false
-}
-
-func exitChatRoom(userClient *tcpClient) bool {
-	chatRoomListLock.Lock()
-	defer chatRoomListLock.Unlock()
-	roomid := userClient.chatroomFlag
-	chatRoomObj, ok := chatRoomList[roomid]
-	if !ok {
-		return false
-	}
-	userClient.chatroomFlag = ""
-	delete(chatRoomObj.userList, userClient.userFlag)
-	if len(chatRoomObj.userList) < 1 {
-		delete(chatRoomList, roomid)
-	}
-	return true
-}
-
-func msgChatRoom(roomid string, msg []byte) {
-	return
 }
 
 /*客户端握手协程*/
@@ -582,10 +535,10 @@ func clientConnHandler(joinChan chan net.Conn) {
 }
 
 func addOfflineMsg(id string, msg []byte) {
-	clientOfflineMsgChannel <- msgOffline{id, msg}
+	clientOfflineMsgChannel <- msgChat{id, msg}
 }
 
-func clientOfflineMsgHandler(msgChan chan msgOffline) {
+func clientOfflineMsgHandler(msgChan chan msgChat) {
 	for offlineMsg := range msgChan {
 		f, err := os.OpenFile(OFFLINEFILEPATH+offlineMsg.id+".txt", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0644)
 		if err == nil {
@@ -630,7 +583,7 @@ func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	clientJoinChannel = make(chan net.Conn, 256)
-	clientOfflineMsgChannel = make(chan msgOffline, 1024)
+	clientOfflineMsgChannel = make(chan msgChat, 1024)
 	go clientConnHandler(clientJoinChannel)
 	go clientOfflineMsgHandler(clientOfflineMsgChannel)
 	clientIDList = make(map[string]*tcpClient)
